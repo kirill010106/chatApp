@@ -42,20 +42,22 @@ class AuthNotifier extends AsyncNotifier<User?> {
   }
 
   Future<void> login(String email, String password) async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(() async {
-      final repo = ref.read(authRepositoryProvider);
+    final repo = ref.read(authRepositoryProvider);
+    try {
       final response = await repo.login(email: email, password: password);
       await _saveTokens(response);
-      return response.user;
-    });
+      state = AsyncData(response.user);
+    } catch (e) {
+      // Don't update state to AsyncError — keep state as-is so the router
+      // does not rebuild and destroy the SnackBar context.
+      rethrow;
+    }
   }
 
   Future<void> register(
       String username, String email, String password, String displayName) async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(() async {
-      final repo = ref.read(authRepositoryProvider);
+    final repo = ref.read(authRepositoryProvider);
+    try {
       final response = await repo.register(
         username: username,
         email: email,
@@ -63,8 +65,10 @@ class AuthNotifier extends AsyncNotifier<User?> {
         displayName: displayName,
       );
       await _saveTokens(response);
-      return response.user;
-    });
+      state = AsyncData(response.user);
+    } catch (e) {
+      rethrow;
+    }
   }
 
   Future<void> logout() async {

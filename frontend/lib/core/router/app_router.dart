@@ -9,12 +9,23 @@ import '../../features/chat/screens/conversation_list_screen.dart';
 import '../../features/chat/screens/chat_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
 
+/// Converts provider changes into a [Listenable] for GoRouter.refreshListenable
+class _AuthNotifier extends ChangeNotifier {
+  _AuthNotifier(Ref ref) {
+    ref.listen(authStateProvider, (_, __) {
+      notifyListeners();
+    });
+  }
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authStateProvider);
+  final authNotifier = _AuthNotifier(ref);
 
   return GoRouter(
     initialLocation: '/conversations',
+    refreshListenable: authNotifier,
     redirect: (context, state) {
+      final authState = ref.read(authStateProvider);
       final isLoggedIn = authState.value != null;
       final isAuthRoute = state.matchedLocation == '/login' ||
           state.matchedLocation == '/register';

@@ -23,22 +23,26 @@ const (
 
 // Client represents a single WebSocket connection.
 type Client struct {
-	hub     *Hub
-	UserID  uuid.UUID
-	conn    *websocket.Conn
-	send    chan []byte
-	msgSvc  *service.MessageService
-	chatSvc *service.ChatService
+	hub         *Hub
+	UserID      uuid.UUID
+	senderName  string
+	conn        *websocket.Conn
+	send        chan []byte
+	msgSvc      *service.MessageService
+	chatSvc     *service.ChatService
+	pushSvc     *service.PushService
 }
 
-func NewClient(hub *Hub, userID uuid.UUID, conn *websocket.Conn, msgSvc *service.MessageService, chatSvc *service.ChatService) *Client {
+func NewClient(hub *Hub, userID uuid.UUID, senderName string, conn *websocket.Conn, msgSvc *service.MessageService, chatSvc *service.ChatService, pushSvc *service.PushService) *Client {
 	return &Client{
-		hub:     hub,
-		UserID:  userID,
-		conn:    conn,
-		send:    make(chan []byte, sendBufSize),
-		msgSvc:  msgSvc,
-		chatSvc: chatSvc,
+		hub:        hub,
+		UserID:     userID,
+		senderName: senderName,
+		conn:       conn,
+		send:       make(chan []byte, sendBufSize),
+		msgSvc:     msgSvc,
+		chatSvc:    chatSvc,
+		pushSvc:    pushSvc,
 	}
 }
 
@@ -148,6 +152,27 @@ func (c *Client) handleMessage(incoming IncomingMessage) {
 	}
 
 	c.hub.SendToUsers(participants, outData)
+
+	// Send push notifications to offline participants
+	if c.pushSvc != nil {
+		for _, uid := range participants {
+			if uid == c.UserID {
+				continue // don't notify sender
+			}
+			if !c.hub.IsOnline(uid) {
+				title := c.senderName
+				if title == "" {
+					title = "New message"
+				}
+				c.pushSvc.SendNotification(uid, service.PushPayload{
+					Title:          title,
+					Body:           incoming.Content,
+					ConversationID: convID.String(),
+					SenderID:       c.UserID.String(),
+				})
+			}
+		}
+	}
 }
 
 func (c *Client) handleReadReceipt(incoming IncomingMessage) {

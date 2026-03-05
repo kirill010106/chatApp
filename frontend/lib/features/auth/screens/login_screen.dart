@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -25,28 +26,43 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
+  String _extractErrorMessage(Object? error) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map<String, dynamic> && data['error'] is String) {
+        return data['error'] as String;
+      }
+      if (error.response?.statusCode == 401) {
+        return 'Invalid email or password.';
+      }
+      if (error.type == DioExceptionType.connectionError ||
+          error.type == DioExceptionType.connectionTimeout) {
+        return 'Cannot reach the server. Check your connection.';
+      }
+    }
+    return 'Login failed. Please try again.';
+  }
+
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
-
-    await ref.read(authStateProvider.notifier).login(
-          _emailController.text.trim(),
-          _passwordController.text,
-        );
-
-    if (mounted) {
-      setState(() => _isLoading = false);
-
-      final authState = ref.read(authStateProvider);
-      if (authState.hasError) {
+    try {
+      await ref.read(authStateProvider.notifier).login(
+            _emailController.text.trim(),
+            _passwordController.text,
+          );
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Login failed: ${authState.error}'),
+            content: Text(_extractErrorMessage(e)),
             backgroundColor: Colors.red,
           ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

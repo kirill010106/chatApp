@@ -17,3 +17,9 @@ Thumbs.db
 
 # Go
 vendor/
+
+frontend/build/
+frontend/.dart_tool/
+frontend/.packages
+
+docker-compose.yml

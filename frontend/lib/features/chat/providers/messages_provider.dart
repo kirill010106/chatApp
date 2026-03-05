@@ -5,7 +5,9 @@ import 'package:uuid/uuid.dart';
 
 import '../../auth/providers/auth_provider.dart';
 import '../data/models/message.dart';
+import '../data/web_file_picker.dart';
 import 'conversations_provider.dart';
+import 'media_provider.dart';
 import 'ws_provider.dart';
 
 final messagesProvider = AsyncNotifierProvider.family<MessagesNotifier,
@@ -84,6 +86,68 @@ class MessagesNotifier extends FamilyAsyncNotifier<List<Message>, String> {
       content: content,
       clientMsgId: clientMsgId,
     );
+  }
+
+  /// Upload file to S3 then send the URL as a message via WS.
+  Future<void> sendMediaMessage(WebFilePickResult file) async {
+    final authState = ref.read(authStateProvider);
+    final currentUser = authState.value;
+    if (currentUser == null) return;
+
+    final clientMsgId = _uuid.v4();
+    final fileName = file.name;
+
+    // Optimistic update — show pending placeholder
+    final pending = Message(
+      id: clientMsgId,
+      conversationId: _conversationId,
+      senderId: currentUser.id,
+      content: 'Uploading $fileName…',
+      contentType: 'text',
+      createdAt: DateTime.now(),
+      clientMsgId: clientMsgId,
+      isPending: true,
+    );
+
+    final current = state.value ?? [];
+    state = AsyncData([pending, ...current]);
+
+    try {
+      final mediaService = ref.read(mediaServiceProvider);
+      final result = await mediaService.uploadWebFile(file);
+
+      // Replace the pending placeholder content with the uploaded URL
+      final updated = state.value ?? [];
+      final idx = updated.indexWhere((m) => m.clientMsgId == clientMsgId);
+      if (idx >= 0) {
+        final newList = [...updated];
+        newList[idx] = Message(
+          id: clientMsgId,
+          conversationId: _conversationId,
+          senderId: currentUser.id,
+          content: result.url,
+          contentType: result.contentType,
+          createdAt: DateTime.now(),
+          clientMsgId: clientMsgId,
+          isPending: true,
+        );
+        state = AsyncData(newList);
+      }
+
+      // Send the URL via WebSocket
+      final wsService = ref.read(wsServiceProvider);
+      wsService.sendMessage(
+        conversationId: _conversationId,
+        content: result.url,
+        clientMsgId: clientMsgId,
+        contentType: result.contentType,
+      );
+    } catch (e) {
+      // Remove pending message on failure
+      final updated = state.value ?? [];
+      state = AsyncData(updated.where((m) => m.clientMsgId != clientMsgId).toList());
+      rethrow;
+    }
   }
 
   Future<void> loadMore() async {

@@ -8,6 +8,7 @@ import '../../../shared/widgets/loading_widget.dart';
 import '../../auth/data/models/auth_response.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/conversations_provider.dart';
+import '../providers/push_provider.dart';
 import '../widgets/conversation_tile.dart';
 
 class ConversationListScreen extends ConsumerStatefulWidget {
@@ -23,6 +24,8 @@ class _ConversationListScreenState
   @override
   Widget build(BuildContext context) {
     final conversations = ref.watch(conversationsProvider);
+    // Initialize push notifications when authenticated
+    ref.watch(pushInitProvider);
 
     return Scaffold(
       appBar: AppBar(

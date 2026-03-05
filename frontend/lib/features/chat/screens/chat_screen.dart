@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../data/web_file_picker.dart';
+
 import '../../../shared/widgets/loading_widget.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../data/ws_service.dart';
@@ -30,6 +32,7 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _scrollController = ScrollController();
   bool _otherHasRead = false;
+  bool _isUploading = false;
   StreamSubscription<ReadReceiptEvent>? _readSub;
 
   @override
@@ -86,6 +89,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     ref
         .read(messagesProvider(widget.conversationId).notifier)
         .sendMessage(text);
+  }
+
+  Future<void> _onSendFile(WebFilePickResult file) async {
+    setState(() {
+      _otherHasRead = false;
+      _isUploading = true;
+    });
+    try {
+      await ref
+          .read(messagesProvider(widget.conversationId).notifier)
+          .sendMediaMessage(file);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Upload failed: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
   }
 
   @override
@@ -150,7 +176,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               error: (e, _) => Center(child: Text('Error: $e')),
             ),
           ),
-          MessageInput(onSend: _onSend),
+          MessageInput(
+            onSend: _onSend,
+            onSendFile: _onSendFile,
+            isUploading: _isUploading,
+          ),
         ],
       ),
     );

@@ -83,6 +83,30 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (C
 	return i, err
 }
 
+const createPushSubscription = `-- name: CreatePushSubscription :exec
+INSERT INTO chatapp.push_subscriptions (user_id, endpoint, p256dh, auth)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (user_id, endpoint) DO UPDATE
+SET p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth
+`
+
+type CreatePushSubscriptionParams struct {
+	UserID   pgtype.UUID `json:"user_id"`
+	Endpoint string      `json:"endpoint"`
+	P256dh   string      `json:"p256dh"`
+	Auth     string      `json:"auth"`
+}
+
+func (q *Queries) CreatePushSubscription(ctx context.Context, arg CreatePushSubscriptionParams) error {
+	_, err := q.db.Exec(ctx, createPushSubscription,
+		arg.UserID,
+		arg.Endpoint,
+		arg.P256dh,
+		arg.Auth,
+	)
+	return err
+}
+
 const createRefreshToken = `-- name: CreateRefreshToken :exec
 INSERT INTO chatapp.refresh_tokens (user_id, token_hash, expires_at)
 VALUES ($1, $2, $3)
@@ -131,6 +155,31 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (Chatapp
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const deletePushSubscription = `-- name: DeletePushSubscription :exec
+DELETE FROM chatapp.push_subscriptions
+WHERE user_id = $1 AND endpoint = $2
+`
+
+type DeletePushSubscriptionParams struct {
+	UserID   pgtype.UUID `json:"user_id"`
+	Endpoint string      `json:"endpoint"`
+}
+
+func (q *Queries) DeletePushSubscription(ctx context.Context, arg DeletePushSubscriptionParams) error {
+	_, err := q.db.Exec(ctx, deletePushSubscription, arg.UserID, arg.Endpoint)
+	return err
+}
+
+const deletePushSubscriptionByEndpoint = `-- name: DeletePushSubscriptionByEndpoint :exec
+DELETE FROM chatapp.push_subscriptions
+WHERE endpoint = $1
+`
+
+func (q *Queries) DeletePushSubscriptionByEndpoint(ctx context.Context, endpoint string) error {
+	_, err := q.db.Exec(ctx, deletePushSubscriptionByEndpoint, endpoint)
+	return err
 }
 
 const deleteRefreshTokenByHash = `-- name: DeleteRefreshTokenByHash :exec
@@ -232,6 +281,39 @@ func (q *Queries) GetParticipants(ctx context.Context, conversationID pgtype.UUI
 			return nil, err
 		}
 		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPushSubscriptionsByUser = `-- name: GetPushSubscriptionsByUser :many
+SELECT id, user_id, endpoint, p256dh, auth, created_at
+FROM chatapp.push_subscriptions
+WHERE user_id = $1
+`
+
+func (q *Queries) GetPushSubscriptionsByUser(ctx context.Context, userID pgtype.UUID) ([]ChatappPushSubscription, error) {
+	rows, err := q.db.Query(ctx, getPushSubscriptionsByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ChatappPushSubscription
+	for rows.Next() {
+		var i ChatappPushSubscription
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Endpoint,
+			&i.P256dh,
+			&i.Auth,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

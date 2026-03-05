@@ -28,4 +28,7 @@ class ApiConstants {
 
   static String markConversationRead(String id) =>
       '/api/v1/conversations/$id/read';
+
+  // Media
+  static const String mediaUpload = '/api/v1/media/upload';
 }

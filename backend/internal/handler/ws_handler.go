@@ -13,12 +13,14 @@ import (
 type WSHandler struct {
 	hub     *ws.Hub
 	authSvc *service.AuthService
+	userSvc *service.UserService
 	msgSvc  *service.MessageService
 	chatSvc *service.ChatService
+	pushSvc *service.PushService
 }
 
-func NewWSHandler(hub *ws.Hub, authSvc *service.AuthService, msgSvc *service.MessageService, chatSvc *service.ChatService) *WSHandler {
-	return &WSHandler{hub: hub, authSvc: authSvc, msgSvc: msgSvc, chatSvc: chatSvc}
+func NewWSHandler(hub *ws.Hub, authSvc *service.AuthService, userSvc *service.UserService, msgSvc *service.MessageService, chatSvc *service.ChatService, pushSvc *service.PushService) *WSHandler {
+	return &WSHandler{hub: hub, authSvc: authSvc, userSvc: userSvc, msgSvc: msgSvc, chatSvc: chatSvc, pushSvc: pushSvc}
 }
 
 func (h *WSHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
@@ -43,7 +45,19 @@ func (h *WSHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := ws.NewClient(h.hub, claims.UserID, conn, h.msgSvc, h.chatSvc)
+	// Look up sender's display name for push notifications.
+	senderName := ""
+	if h.userSvc != nil {
+		if u, err := h.userSvc.GetByID(claims.UserID); err == nil {
+			if u.DisplayName != "" {
+				senderName = u.DisplayName
+			} else {
+				senderName = u.Username
+			}
+		}
+	}
+
+	client := ws.NewClient(h.hub, claims.UserID, senderName, conn, h.msgSvc, h.chatSvc, h.pushSvc)
 	h.hub.Register(client)
 
 	go client.WritePump()

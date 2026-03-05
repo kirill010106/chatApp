@@ -52,12 +52,35 @@ func main() {
 	convRepo := postgres.NewConversationRepo(pool)
 	msgRepo := postgres.NewMessageRepo(pool)
 	refreshTokenRepo := postgres.NewRefreshTokenRepo(pool)
+	pushSubRepo := postgres.NewPushSubscriptionRepo(pool)
 
 	// Services
 	authSvc := service.NewAuthService(userRepo, refreshTokenRepo, cfg.JWTSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
 	userSvc := service.NewUserService(userRepo)
 	chatSvc := service.NewChatService(convRepo)
 	msgSvc := service.NewMessageService(msgRepo, convRepo)
+
+	// Push notifications service
+	var pushSvc *service.PushService
+	if cfg.VAPIDPublicKey != "" && cfg.VAPIDPrivateKey != "" {
+		pushSvc = service.NewPushService(pushSubRepo, cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey, cfg.VAPIDEmail)
+		log.Info().Msg("web push notifications enabled")
+	} else {
+		log.Warn().Msg("VAPID keys not set — web push notifications disabled")
+	}
+
+	// Media (S3) service
+	var mediaSvc *service.MediaService
+	if cfg.S3Endpoint != "" && cfg.S3AccessKey != "" {
+		var err error
+		mediaSvc, err = service.NewMediaService(cfg.S3Endpoint, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Bucket, cfg.S3Region)
+		if err != nil {
+			log.Fatal().Err(err).Msg("failed to init media service")
+		}
+		log.Info().Str("bucket", cfg.S3Bucket).Msg("S3 media service enabled")
+	} else {
+		log.Warn().Msg("S3 credentials not set — media uploads disabled")
+	}
 
 	// WebSocket Hub
 	hub := ws.NewHub()
@@ -67,7 +90,8 @@ func main() {
 	authHandler := handler.NewAuthHandler(authSvc)
 	userHandler := handler.NewUserHandler(userSvc)
 	chatHandler := handler.NewChatHandler(chatSvc, msgSvc)
-	wsHandler := handler.NewWSHandler(hub, authSvc, msgSvc, chatSvc)
+	wsHandler := handler.NewWSHandler(hub, authSvc, userSvc, msgSvc, chatSvc, pushSvc)
+	pushHandler := handler.NewPushHandler(pushSvc)
 
 	// Router
 	r := chi.NewRouter()
@@ -97,21 +121,52 @@ func main() {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 
+	// Public push endpoint (client needs VAPID key before auth)
+	r.Get("/api/v1/push/vapid-key", pushHandler.VAPIDPublicKey)
+
 	// WebSocket (auth via query param, not header)
 	r.Get("/ws", wsHandler.HandleWS)
 
-	// Protected routes
-	r.Group(func(r chi.Router) {
-		r.Use(middleware.Auth(authSvc))
+	// Media proxy — public (URLs are shared in messages, loaded by <img> tags)
+	if mediaSvc != nil {
+		mediaHandler := handler.NewMediaHandler(mediaSvc)
+		r.Get("/api/v1/media/*", mediaHandler.Proxy)
 
-		r.Get("/api/v1/users/me", userHandler.Me)
-		r.Get("/api/v1/users/search", userHandler.Search)
+		// Protected routes
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.Auth(authSvc))
 
-		r.Post("/api/v1/conversations", chatHandler.Create)
-		r.Get("/api/v1/conversations", chatHandler.List)
-		r.Get("/api/v1/conversations/{id}/messages", chatHandler.Messages)
-		r.Post("/api/v1/conversations/{id}/read", chatHandler.MarkRead)
-	})
+			r.Get("/api/v1/users/me", userHandler.Me)
+			r.Get("/api/v1/users/search", userHandler.Search)
+
+			r.Post("/api/v1/conversations", chatHandler.Create)
+			r.Get("/api/v1/conversations", chatHandler.List)
+			r.Get("/api/v1/conversations/{id}/messages", chatHandler.Messages)
+			r.Post("/api/v1/conversations/{id}/read", chatHandler.MarkRead)
+
+			r.Post("/api/v1/push/subscribe", pushHandler.Subscribe)
+			r.Post("/api/v1/push/unsubscribe", pushHandler.Unsubscribe)
+
+			// Media upload
+			r.Post("/api/v1/media/upload", mediaHandler.Upload)
+		})
+	} else {
+		// Protected routes (no media)
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.Auth(authSvc))
+
+			r.Get("/api/v1/users/me", userHandler.Me)
+			r.Get("/api/v1/users/search", userHandler.Search)
+
+			r.Post("/api/v1/conversations", chatHandler.Create)
+			r.Get("/api/v1/conversations", chatHandler.List)
+			r.Get("/api/v1/conversations/{id}/messages", chatHandler.Messages)
+			r.Post("/api/v1/conversations/{id}/read", chatHandler.MarkRead)
+
+			r.Post("/api/v1/push/subscribe", pushHandler.Subscribe)
+			r.Post("/api/v1/push/unsubscribe", pushHandler.Unsubscribe)
+		})
+	}
 
 	// Server
 	addr := fmt.Sprintf(":%d", cfg.Port)

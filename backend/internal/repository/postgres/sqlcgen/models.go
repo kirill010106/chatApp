@@ -33,6 +33,15 @@ type ChatappParticipant struct {
 	LastReadAt     pgtype.Timestamptz `json:"last_read_at"`
 }
 
+type ChatappPushSubscription struct {
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Endpoint  string             `json:"endpoint"`
+	P256dh    string             `json:"p256dh"`
+	Auth      string             `json:"auth"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type ChatappRefreshToken struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    pgtype.UUID        `json:"user_id"`

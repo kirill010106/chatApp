@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 import '../constants/api_constants.dart';
 import '../storage/secure_storage.dart';
-import 'api_exceptions.dart';
 
 class DioClient {
   late final Dio _dio;
@@ -31,7 +30,13 @@ class DioClient {
           handler.next(options);
         },
         onError: (error, handler) async {
-          if (error.response?.statusCode == 401) {
+          // Don't attempt token refresh for auth endpoints themselves
+          final path = error.requestOptions.path;
+          final isAuthEndpoint = path.contains('/auth/login') ||
+              path.contains('/auth/register') ||
+              path.contains('/auth/refresh');
+
+          if (error.response?.statusCode == 401 && !isAuthEndpoint) {
             // Try to refresh token
             final refreshed = await _tryRefresh();
             if (refreshed) {

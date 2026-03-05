@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -29,30 +30,45 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     super.dispose();
   }
 
+  String _extractErrorMessage(Object? error) {
+    if (error is DioException) {
+      final data = error.response?.data;
+      if (data is Map<String, dynamic> && data['error'] is String) {
+        return data['error'] as String;
+      }
+      if (error.response?.statusCode == 409) {
+        return 'An account with that email or username already exists.';
+      }
+      if (error.type == DioExceptionType.connectionError ||
+          error.type == DioExceptionType.connectionTimeout) {
+        return 'Cannot reach the server. Check your connection.';
+      }
+    }
+    return 'Registration failed. Please try again.';
+  }
+
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
-
-    await ref.read(authStateProvider.notifier).register(
-          _usernameController.text.trim(),
-          _emailController.text.trim(),
-          _passwordController.text,
-          _displayNameController.text.trim(),
-        );
-
-    if (mounted) {
-      setState(() => _isLoading = false);
-
-      final authState = ref.read(authStateProvider);
-      if (authState.hasError) {
+    try {
+      await ref.read(authStateProvider.notifier).register(
+            _usernameController.text.trim(),
+            _emailController.text.trim(),
+            _passwordController.text,
+            _displayNameController.text.trim(),
+          );
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Registration failed: ${authState.error}'),
+            content: Text(_extractErrorMessage(e)),
             backgroundColor: Colors.red,
           ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
