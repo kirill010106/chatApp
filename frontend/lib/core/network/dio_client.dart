@@ -1,0 +1,110 @@
+import 'package:dio/dio.dart';
+import '../constants/api_constants.dart';
+import '../storage/secure_storage.dart';
+import 'api_exceptions.dart';
+
+class DioClient {
+  late final Dio _dio;
+
+  // In-memory access token for fast access
+  String? _accessToken;
+
+  DioClient() {
+    _dio = Dio(
+      BaseOptions(
+        baseUrl: ApiConstants.baseUrl,
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 10),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      ),
+    );
+
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) async {
+          if (_accessToken != null) {
+            options.headers['Authorization'] = 'Bearer $_accessToken';
+          }
+          handler.next(options);
+        },
+        onError: (error, handler) async {
+          if (error.response?.statusCode == 401) {
+            // Try to refresh token
+            final refreshed = await _tryRefresh();
+            if (refreshed) {
+              // Retry the original request
+              final opts = error.requestOptions;
+              opts.headers['Authorization'] = 'Bearer $_accessToken';
+              try {
+                final response = await _dio.fetch(opts);
+                return handler.resolve(response);
+              } catch (e) {
+                return handler.reject(error);
+              }
+            }
+          }
+          handler.next(error);
+        },
+      ),
+    );
+  }
+
+  Dio get dio => _dio;
+
+  void setAccessToken(String token) {
+    _accessToken = token;
+  }
+
+  void clearAccessToken() {
+    _accessToken = null;
+  }
+
+  String? get accessToken => _accessToken;
+
+  Future<bool> _tryRefresh() async {
+    try {
+      final refreshToken = await SecureStorage.getRefreshToken();
+      if (refreshToken == null) return false;
+
+      // Use a separate Dio instance to avoid interceptor loops
+      final refreshDio = Dio(BaseOptions(baseUrl: ApiConstants.baseUrl));
+      final response = await refreshDio.post(
+        ApiConstants.refresh,
+        data: {'refresh_token': refreshToken},
+      );
+
+      if (response.statusCode == 200) {
+        final newAccess = response.data['access_token'] as String;
+        final newRefresh = response.data['refresh_token'] as String;
+        _accessToken = newAccess;
+        await SecureStorage.setAccessToken(newAccess);
+        await SecureStorage.setRefreshToken(newRefresh);
+        return true;
+      }
+    } catch (_) {
+      // Refresh failed, user needs to re-login
+    }
+    return false;
+  }
+
+  // Convenience methods
+
+  Future<Response> get(String path, {Map<String, dynamic>? queryParameters}) {
+    return _dio.get(path, queryParameters: queryParameters);
+  }
+
+  Future<Response> post(String path, {dynamic data}) {
+    return _dio.post(path, data: data);
+  }
+
+  Future<Response> put(String path, {dynamic data}) {
+    return _dio.put(path, data: data);
+  }
+
+  Future<Response> delete(String path) {
+    return _dio.delete(path);
+  }
+}

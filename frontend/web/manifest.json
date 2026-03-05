@@ -1,0 +1,11 @@
+{
+  "name": "ChatApp",
+  "short_name": "ChatApp",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#e94560",
+  "description": "Real-time chat messenger",
+  "orientation": "portrait-primary",
+  "prefer_related_applications": false
+}
