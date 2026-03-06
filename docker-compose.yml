@@ -11,6 +11,8 @@ services:
     build:
       context: ./frontend
       args:
+        # Empty = relative URLs (nginx proxies /api/ and /ws to backend)
+        # For external API: API_BASE_URL: "https://your-domain.com"
         API_BASE_URL: ""
         WS_URL: ""
     ports:
