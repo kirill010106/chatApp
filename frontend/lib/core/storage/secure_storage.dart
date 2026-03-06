@@ -22,8 +22,7 @@ class SecureStorage {
 
   static Future<String?> _read(String key) async {
     if (kIsWeb) {
-      final v = web.window.localStorage.getItem(key);
-      return v == null || v.isNull ? null : v.toDart;
+      return web.window.localStorage.getItem(key);
     }
     return _storage.read(key: key);
   }
