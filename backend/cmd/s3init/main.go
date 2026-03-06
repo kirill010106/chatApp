@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -12,11 +13,23 @@ import (
 )
 
 func main() {
+	accessKey := os.Getenv("S3_ACCESS_KEY")
+	secretKey := os.Getenv("S3_SECRET_KEY")
+	endpoint := os.Getenv("S3_ENDPOINT")
+	region := os.Getenv("S3_REGION")
+	if accessKey == "" || secretKey == "" || endpoint == "" {
+		fmt.Println("Set S3_ACCESS_KEY, S3_SECRET_KEY, S3_ENDPOINT env vars")
+		os.Exit(1)
+	}
+	if region == "" {
+		region = "us-east-1"
+	}
+
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion("us-east-1"),
+		config.WithRegion(region),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-			"PLACEHOLDER_ACCESS_KEY",
-			"PLACEHOLDER_SECRET_KEY",
+			accessKey,
+			secretKey,
 			"",
 		)),
 	)
@@ -25,7 +38,7 @@ func main() {
 		return
 	}
 	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
-		o.BaseEndpoint = aws.String("https://s3.example.com")
+		o.BaseEndpoint = aws.String(endpoint)
 		o.UsePathStyle = true
 	})
 
