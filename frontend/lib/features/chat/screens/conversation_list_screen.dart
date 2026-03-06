@@ -21,16 +21,50 @@ class ConversationListScreen extends ConsumerStatefulWidget {
 
 class _ConversationListScreenState
     extends ConsumerState<ConversationListScreen> {
+  String _pushStatus = 'default'; // 'default', 'granted', 'denied', 'unsupported'
+
+  @override
+  void initState() {
+    super.initState();
+    _checkPushStatus();
+  }
+
+  void _checkPushStatus() {
+    try {
+      final svc = ref.read(pushNotificationServiceProvider);
+      setState(() => _pushStatus = svc.getPermissionStatus());
+    } catch (_) {
+      setState(() => _pushStatus = 'unsupported');
+    }
+  }
+
+  Future<void> _requestPushPermission() async {
+    final svc = ref.read(pushNotificationServiceProvider);
+    final granted = await svc.initialize();
+    setState(() => _pushStatus = granted ? 'granted' : _pushStatus);
+    if (granted && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Push notifications enabled')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final conversations = ref.watch(conversationsProvider);
-    // Initialize push notifications when authenticated
-    ref.watch(pushInitProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Chats'),
         actions: [
+          if (_pushStatus != 'unsupported' && _pushStatus != 'granted')
+            IconButton(
+              icon: const Icon(Icons.notifications_none),
+              tooltip: 'Enable notifications',
+              onPressed: _requestPushPermission,
+            ),
+          if (_pushStatus == 'granted')
+            const Icon(Icons.notifications_active, color: Colors.green),
           IconButton(
             icon: const Icon(Icons.person_outline),
             onPressed: () => context.go('/profile'),
