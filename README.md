@@ -85,7 +85,30 @@ All secrets live in `.env` (never committed to git). See `.env.example` for the 
 
 ## Deployment (MakeCloud / VPS)
 
-### Option A: Local build → push images → deploy (recommended)
+### Option A: GitHub Actions (recommended)
+
+Push to `main` → GitHub Actions builds both images → pushes to GHCR automatically.
+
+**1. Set repository secrets** (GitHub → Settings → Secrets → Actions):
+- `API_BASE_URL` — e.g. `https://your-domain.com`
+- `WS_URL` — e.g. `wss://your-domain.com`
+
+> `GITHUB_TOKEN` is provided automatically — no need to create it.
+
+**2. Push code:**
+```bash
+git push origin main
+# GitHub Actions builds & pushes ghcr.io/kirill010106/chatapp-backend:latest
+#                                 ghcr.io/kirill010106/chatapp-frontend:latest
+```
+
+**3. On the server:**
+```bash
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### Option B: Local build → push images → deploy
 
 Build images on your machine (fast), push to GHCR, pull on the server.
 
