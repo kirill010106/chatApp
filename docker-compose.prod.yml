@@ -1,0 +1,21 @@
+# Production compose — pulls pre-built images, no build on server.
+# Usage:
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+
+services:
+  backend:
+    image: ghcr.io/kirill010106/chatapp-backend:latest
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/kirill010106/chatapp-frontend:latest
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

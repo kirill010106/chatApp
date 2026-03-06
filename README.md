@@ -85,37 +85,56 @@ All secrets live in `.env` (never committed to git). See `.env.example` for the 
 
 ## Deployment (MakeCloud / VPS)
 
-### Option A: Docker Compose on a VM
+### Option A: Local build → push images → deploy (recommended)
 
-1. SSH into your server
-2. Install Docker & Docker Compose
-3. Clone the repo, create `.env` with production values
-4. Set `API_BASE_URL` and `WS_URL` build args in `docker-compose.yml`:
+Build images on your machine (fast), push to GHCR, pull on the server.
 
-```yaml
-frontend:
-  build:
-    context: ./frontend
-    args:
-      API_BASE_URL: "https://your-domain.com"
-      WS_URL: "wss://your-domain.com"
+**1. Login to GitHub Container Registry (once):**
+
+```bash
+echo $GITHUB_TOKEN | docker login ghcr.io -u YOUR_USERNAME --password-stdin
 ```
 
-5. Run `docker compose up -d --build`
-6. Point your domain (or reverse proxy) to port 80
+**2. Build & push from your machine:**
 
-### Option B: Separate containers (MakeCloud)
+```bash
+API_BASE_URL=https://your-domain.com \
+WS_URL=wss://your-domain.com \
+bash deploy.sh
+```
+
+This builds both images locally and pushes them to `ghcr.io/kirill010106/chatapp-*`.
+
+**3. On the server:**
+
+```bash
+# Copy .env with production secrets, then:
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+```
+
+> **Tip:** To customize the registry/tag: `REGISTRY=... TAG=v1.0 bash deploy.sh`
+
+### Option B: Build on the server
+
+If you prefer building directly on the server (slower, needs more RAM):
+
+1. SSH into your server, install Docker & Docker Compose
+2. Clone the repo, create `.env` with production values
+3. Set `API_BASE_URL` and `WS_URL` build args in `docker-compose.yml`
+4. Run `docker compose up -d --build`
+
+### Option C: Separate containers (MakeCloud)
 
 If the platform deploys containers individually:
 
 **Backend:**
-- Image: build from `./backend/Dockerfile`
+- Image: `ghcr.io/kirill010106/chatapp-backend:latest` (or build from `./backend/Dockerfile`)
 - Port: `8080`
 - Env vars: set all from `.env` in the platform dashboard
 
 **Frontend:**
-- Image: build from `./frontend/Dockerfile`
-- Build args: `API_BASE_URL=https://api.your-domain.com`, `WS_URL=wss://api.your-domain.com`
+- Image: `ghcr.io/kirill010106/chatapp-frontend:latest` (or build with `API_BASE_URL` / `WS_URL` build args)
 - Port: `80`
 
 ## API Endpoints
