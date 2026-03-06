@@ -203,5 +203,3 @@ class WsService {
     _connectionStateController.close();
   }
 }
-  }
-}
