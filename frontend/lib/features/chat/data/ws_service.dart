@@ -68,7 +68,10 @@ class WsService {
     _connecting = true;
     final connectTime = DateTime.now();
 
-    final uri = Uri.parse('${ApiConstants.wsUrl}?token=$_token');
+    final wsBase = ApiConstants.baseUrl
+        .replaceFirst('https://', 'wss://')
+        .replaceFirst('http://', 'ws://');
+    final uri = Uri.parse('$wsBase/ws?token=$_token');
     _channel = WebSocketChannel.connect(uri);
 
     bool receivedData = false;

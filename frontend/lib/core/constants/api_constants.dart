@@ -6,10 +6,8 @@ class ApiConstants {
     defaultValue: 'http://localhost:8080',
   );
 
-  static const String wsUrl = String.fromEnvironment(
-    'WS_URL',
-    defaultValue: 'ws://localhost:8080/ws',
-  );
+  // WS URL is derived at runtime from baseUrl (http→ws, https→wss)
+  // so WS_URL build arg is no longer needed.
 
   // Auth
   static const String register = '/api/v1/auth/register';

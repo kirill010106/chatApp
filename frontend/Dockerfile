@@ -5,11 +5,9 @@ COPY pubspec.yaml pubspec.lock ./
 RUN flutter pub get
 COPY . .
 ARG API_BASE_URL=""
-ARG WS_URL=""
 RUN flutter build web \
     --release \
-    --dart-define=API_BASE_URL=$API_BASE_URL \
-    --dart-define=WS_URL=$WS_URL
+    --dart-define=API_BASE_URL=$API_BASE_URL
 
 # Run stage — Nginx
 FROM nginx:alpine
