@@ -16,7 +16,7 @@ services:
   frontend:
     image: ghcr.io/kirill010106/chatapp-frontend:latest
     ports:
-      - "80:80"
+      - "8081:80"
     depends_on:
       - backend
     restart: unless-stopped
