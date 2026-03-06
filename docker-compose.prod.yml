@@ -6,8 +6,9 @@
 services:
   backend:
     image: ghcr.io/kirill010106/chatapp-backend:latest
-    ports:
-      - "8080:8080"
+    # Port 8080 not exposed externally — nginx proxies /api/ and /ws internally
+    expose:
+      - "8080"
     env_file:
       - .env
     restart: unless-stopped
