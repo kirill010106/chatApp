@@ -7,19 +7,22 @@ import '../data/ws_service.dart';
 final wsServiceProvider = Provider<WsService>((ref) {
   final wsService = WsService();
 
-  // Connect if already authenticated
-  Future<void> tryConnect() async {
-    final token = await SecureStorage.getAccessToken();
-    if (token != null) {
-      wsService.connect(token);
-    }
-  }
+  // Track whether we already attempted connection for the current user.
+  String? connectedUserId;
 
   // Listen for auth state changes (including initial load)
   ref.listen(authStateProvider, (previous, next) async {
-    if (next.value != null) {
-      await tryConnect();
+    final user = next.value;
+    if (user != null) {
+      // Only connect if user changed (login or fresh load)
+      if (connectedUserId == user.id) return;
+      connectedUserId = user.id;
+      final token = await SecureStorage.getAccessToken();
+      if (token != null) {
+        wsService.connect(token);
+      }
     } else {
+      connectedUserId = null;
       wsService.disconnect();
     }
   }, fireImmediately: true);

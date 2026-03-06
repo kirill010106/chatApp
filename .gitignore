@@ -2,8 +2,10 @@
 bin/
 *.exe
 
-# Environment
+# Environment / secrets
 .env
+.env.local
+.env.production
 
 # IDE
 .idea/
@@ -18,8 +20,7 @@ Thumbs.db
 # Go
 vendor/
 
+# Flutter
 frontend/build/
 frontend/.dart_tool/
 frontend/.packages
-
-docker-compose.yml

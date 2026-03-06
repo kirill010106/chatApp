@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../../core/constants/api_constants.dart';
@@ -23,8 +24,14 @@ class WsService {
   int _retryCount = 0;
   String? _token;
   bool _disposed = false;
-  bool _everReceivedData = false;
-  DateTime? _connectedAt;
+
+  /// Tracks whether we are in the middle of a connect attempt.
+  bool _connecting = false;
+
+  /// Set to true when a 401 / auth-failure is detected.
+  /// Blocks ALL automatic reconnection until [connect] is called with
+  /// a **different** token.
+  bool _authFailed = false;
 
   final _messageController = StreamController<Message>.broadcast();
   Stream<Message> get messageStream => _messageController.stream;
@@ -33,40 +40,48 @@ class WsService {
   Stream<ReadReceiptEvent> get readReceiptStream =>
       _readReceiptController.stream;
 
+  /// Called by the provider when the user logs in / has a token.
   void connect(String token) {
-    // Ignore duplicate connect calls with the same token while already connected
+    // If we already have a live connection with this token — skip.
     if (_token == token && _channel != null && !_disposed) return;
 
-    // Clean up any existing connection
+    // If auth previously failed and caller passes the SAME token — skip.
+    if (_authFailed && _token == token) return;
+
+    // New token (or first call) — reset everything.
     _reconnectTimer?.cancel();
     _channel?.sink.close();
+    _channel = null;
 
     _token = token;
     _disposed = false;
     _retryCount = 0;
+    _authFailed = false;
+    _connecting = false;
+
     _doConnect();
   }
 
   void _doConnect() {
-    if (_disposed || _token == null) return;
+    if (_disposed || _token == null || _connecting || _authFailed) return;
 
-    _everReceivedData = false;
-    _connectedAt = DateTime.now();
+    _connecting = true;
+    final connectTime = DateTime.now();
 
     final uri = Uri.parse('${ApiConstants.wsUrl}?token=$_token');
     _channel = WebSocketChannel.connect(uri);
 
+    bool receivedData = false;
+
     _channel!.stream.listen(
       (data) {
-        _everReceivedData = true;
-        // Reset retry count on successful data — connection is healthy
-        _retryCount = 0;
+        receivedData = true;
+        _retryCount = 0; // connection is healthy
         try {
           final json = jsonDecode(data as String) as Map<String, dynamic>;
           final type = json['type'] as String?;
           if (type == 'message') {
-            final msg = Message.fromJson(json);
-            _messageController.add(msg);
+            _messageController.add(Message.fromJson(json));
           } else if (type == 'read_receipt') {
             _readReceiptController.add(ReadReceiptEvent(
               conversationId: json['conversation_id'] as String,
@@ -75,33 +90,41 @@ class WsService {
           }
         } catch (_) {}
       },
-      onDone: _onDisconnect,
-      onError: (_) => _onDisconnect(),
+      onDone: () => _onDisconnect(receivedData, connectTime),
+      onError: (_) => _onDisconnect(receivedData, connectTime),
     );
+
+    _connecting = false;
   }
 
-  void _onDisconnect() {
+  void _onDisconnect(bool receivedData, DateTime connectTime) {
     _channel = null;
     if (_disposed) return;
 
-    // If the connection closed almost immediately and we never received data,
-    // this is likely a 401/auth error — don't keep retrying with a bad token.
-    final connectionLifetime =
-        DateTime.now().difference(_connectedAt ?? DateTime.now());
-    if (!_everReceivedData && connectionLifetime.inSeconds < 3) {
-      // Auth failure — stop reconnecting
+    // If the connection closed very quickly and we never received data,
+    // this is almost certainly a 401 / auth rejection.
+    final lifetime = DateTime.now().difference(connectTime);
+    if (!receivedData && lifetime.inSeconds < 5) {
+      debugPrint('WS: auth failure detected (closed in ${lifetime.inMilliseconds}ms with no data) — stopping');
+      _authFailed = true;
       return;
     }
 
-    if (_retryCount >= AppConstants.wsMaxReconnectAttempts) return;
+    // Normal disconnect — try to reconnect with backoff.
+    if (_retryCount >= AppConstants.wsMaxReconnectAttempts) {
+      debugPrint('WS: max reconnect attempts reached — stopping');
+      return;
+    }
 
     final delay =
         AppConstants.wsReconnectBaseDelay * pow(2, _retryCount).toInt();
+    debugPrint('WS: reconnecting in ${delay.inSeconds}s (attempt ${_retryCount + 1})');
+
     _reconnectTimer = Timer(delay, () async {
       _retryCount++;
-      // Re-read token from storage — Dio interceptor may have refreshed it
+      // Re-read token — Dio interceptor may have refreshed it.
       final freshToken = await SecureStorage.getAccessToken();
-      if (freshToken != null) {
+      if (freshToken != null && !_disposed && !_authFailed) {
         _token = freshToken;
         _doConnect();
       }
@@ -115,27 +138,21 @@ class WsService {
     String contentType = 'text',
   }) {
     if (_channel == null) return;
-
-    final payload = jsonEncode({
+    _channel!.sink.add(jsonEncode({
       'type': 'message',
       'conversation_id': conversationId,
       'content': content,
       'content_type': contentType,
       'client_msg_id': clientMsgId,
-    });
-
-    _channel!.sink.add(payload);
+    }));
   }
 
   void sendReadReceipt({required String conversationId}) {
     if (_channel == null) return;
-
-    final payload = jsonEncode({
+    _channel!.sink.add(jsonEncode({
       'type': 'read_receipt',
       'conversation_id': conversationId,
-    });
-
-    _channel!.sink.add(payload);
+    }));
   }
 
   void disconnect() {

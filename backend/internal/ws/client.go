@@ -23,14 +23,14 @@ const (
 
 // Client represents a single WebSocket connection.
 type Client struct {
-	hub         *Hub
-	UserID      uuid.UUID
-	senderName  string
-	conn        *websocket.Conn
-	send        chan []byte
-	msgSvc      *service.MessageService
-	chatSvc     *service.ChatService
-	pushSvc     *service.PushService
+	hub        *Hub
+	UserID     uuid.UUID
+	senderName string
+	conn       *websocket.Conn
+	send       chan []byte
+	msgSvc     *service.MessageService
+	chatSvc    *service.ChatService
+	pushSvc    *service.PushService
 }
 
 func NewClient(hub *Hub, userID uuid.UUID, senderName string, conn *websocket.Conn, msgSvc *service.MessageService, chatSvc *service.ChatService, pushSvc *service.PushService) *Client {
