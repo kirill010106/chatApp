@@ -31,17 +31,23 @@ class ChatScreen extends ConsumerStatefulWidget {
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _scrollController = ScrollController();
-  bool _otherHasRead = false;
+  DateTime? _otherLastReadAt;
   bool _isUploading = false;
   StreamSubscription<ReadReceiptEvent>? _readSub;
+  StreamSubscription<WsConnectionState>? _connSub;
+  WsConnectionState _connState = WsConnectionState.connected;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
     _listenReadReceipts();
+    _listenConnectionState();
     // Delay provider modification until after widget tree is built
-    Future.microtask(() => _markAsRead());
+    Future.microtask(() {
+      _markAsRead();
+      _fetchReadStatus();
+    });
   }
 
   void _markAsRead() {
@@ -61,16 +67,38 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (event.conversationId == widget.conversationId &&
           currentUser != null &&
           event.userId != currentUser.id) {
+        // Other user just read — update timestamp to now
         if (mounted) {
-          setState(() => _otherHasRead = true);
+          setState(() => _otherLastReadAt = DateTime.now());
         }
       }
+    });
+  }
+
+  Future<void> _fetchReadStatus() async {
+    try {
+      final repo = ref.read(chatRepositoryProvider);
+      final ts = await repo.getReadStatus(widget.conversationId);
+      if (mounted && ts != null) {
+        setState(() => _otherLastReadAt = ts);
+      }
+    } catch (_) {
+      // Non-critical, ignore errors
+    }
+  }
+
+  void _listenConnectionState() {
+    final wsService = ref.read(wsServiceProvider);
+    _connState = wsService.currentState;
+    _connSub = wsService.connectionStateStream.listen((s) {
+      if (mounted) setState(() => _connState = s);
     });
   }
 
   @override
   void dispose() {
     _readSub?.cancel();
+    _connSub?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -84,8 +112,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   void _onSend(String text) {
-    // After sending, the other user hasn't read yet
-    setState(() => _otherHasRead = false);
     ref
         .read(messagesProvider(widget.conversationId).notifier)
         .sendMessage(text);
@@ -93,7 +119,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Future<void> _onSendFile(WebFilePickResult file) async {
     setState(() {
-      _otherHasRead = false;
       _isUploading = true;
     });
     try {
@@ -145,6 +170,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
       body: Column(
         children: [
+          if (_connState != WsConnectionState.connected)
+            MaterialBanner(
+              content: Text(
+                _connState == WsConnectionState.connecting
+                    ? 'Reconnecting…'
+                    : 'No connection',
+              ),
+              leading: _connState == WsConnectionState.connecting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.cloud_off, color: Colors.red),
+              backgroundColor: Colors.orange.shade100,
+              actions: const [SizedBox.shrink()],
+            ),
           Expanded(
             child: messages.when(
               data: (msgs) {
@@ -161,14 +203,40 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   itemBuilder: (context, index) {
                     final msg = msgs[index];
                     final isMine = msg.senderId == currentUser?.id;
-                    // In a 1-to-1 chat, if the other user has read,
-                    // all my sent messages are read
-                    final isRead = isMine && _otherHasRead;
-                    return MessageBubble(
+                    // Message is read if it was sent before the other user's last read
+                    final isRead = isMine &&
+                        _otherLastReadAt != null &&
+                        !msg.isPending &&
+                        !msg.isFailed &&
+                        !msg.createdAt.isAfter(_otherLastReadAt!);
+                    final bubble = MessageBubble(
                       message: msg,
                       isMine: isMine,
                       isRead: isRead,
                     );
+                    if (msg.isFailed && msg.clientMsgId != null) {
+                      return GestureDetector(
+                        onTap: () => ref
+                            .read(messagesProvider(widget.conversationId)
+                                .notifier)
+                            .retryMessage(msg.clientMsgId!),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            bubble,
+                            const Padding(
+                              padding: EdgeInsets.only(right: 12, bottom: 4),
+                              child: Text(
+                                'Tap to retry',
+                                style: TextStyle(
+                                    color: Colors.redAccent, fontSize: 11),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                    return bubble;
                   },
                 );
               },

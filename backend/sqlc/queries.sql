@@ -21,6 +21,14 @@ FROM chatapp.users
 WHERE username ILIKE '%' || $1 || '%' OR display_name ILIKE '%' || $1 || '%'
 LIMIT $2;
 
+-- name: UpdateUser :one
+UPDATE chatapp.users
+SET display_name = COALESCE(NULLIF(@display_name::text, ''), display_name),
+    avatar_url   = COALESCE(NULLIF(@avatar_url::text, ''), avatar_url),
+    updated_at   = now()
+WHERE id = @id
+RETURNING id, username, email, password_hash, display_name, avatar_url, created_at, updated_at;
+
 -- name: CreateConversation :one
 INSERT INTO chatapp.conversations (is_group, title)
 VALUES ($1, $2)

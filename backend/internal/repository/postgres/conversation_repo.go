@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -158,4 +159,18 @@ func (r *ConversationRepo) MarkRead(conversationID, userID uuid.UUID) error {
 		return fmt.Errorf("conversation repo mark read: %w", err)
 	}
 	return nil
+}
+
+func (r *ConversationRepo) GetLastReadAt(conversationID, userID uuid.UUID) (time.Time, error) {
+	ts, err := r.queries.GetLastReadAt(context.Background(), sqlcgen.GetLastReadAtParams{
+		ConversationID: uuidToPgUUID(conversationID),
+		UserID:         uuidToPgUUID(userID),
+	})
+	if err != nil {
+		return time.Time{}, fmt.Errorf("conversation repo get last read at: %w", err)
+	}
+	if !ts.Valid {
+		return time.Time{}, nil
+	}
+	return ts.Time, nil
 }

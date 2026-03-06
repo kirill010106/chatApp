@@ -52,4 +52,13 @@ class ChatRepository {
   Future<void> markRead(String conversationId) async {
     await _client.post(ApiConstants.markConversationRead(conversationId));
   }
+
+  /// Returns the other user's last_read_at timestamp, or null if never read.
+  Future<DateTime?> getReadStatus(String conversationId) async {
+    final response =
+        await _client.get(ApiConstants.conversationReadStatus(conversationId));
+    final raw = response.data['other_last_read_at'];
+    if (raw == null) return null;
+    return DateTime.parse(raw as String);
+  }
 }

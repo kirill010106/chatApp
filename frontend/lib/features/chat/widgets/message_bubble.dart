@@ -192,7 +192,13 @@ class MessageBubble extends StatelessWidget {
         ),
         if (isMine) ...[
           const SizedBox(width: 4),
-          if (message.isPending)
+          if (message.isFailed)
+            Icon(
+              Icons.error_outline,
+              size: 14,
+              color: Colors.redAccent,
+            )
+          else if (message.isPending)
             SizedBox(
               width: 10,
               height: 10,

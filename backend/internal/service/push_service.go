@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/SherClockHolmes/webpush-go"
 	"github.com/google/uuid"
@@ -94,9 +96,16 @@ func (s *PushService) sendToSubscription(sub *domain.PushSubscription, data []by
 		VAPIDPublicKey:  s.vapidPub,
 		VAPIDPrivateKey: s.vapidPriv,
 		TTL:             60,
+		HTTPClient:      &http.Client{Timeout: 10 * time.Second},
 	})
 	if err != nil {
-		log.Error().Err(err).Str("endpoint", sub.Endpoint).Msg("push: failed to send")
+		// Network timeout likely means push service is unreachable — remove subscription
+		if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "i/o timeout") {
+			log.Warn().Str("endpoint", sub.Endpoint).Msg("push: push service unreachable, removing subscription")
+			_ = s.repo.DeleteByEndpoint(sub.Endpoint)
+		} else {
+			log.Error().Err(err).Str("endpoint", sub.Endpoint).Msg("push: failed to send")
+		}
 		return
 	}
 	defer resp.Body.Close()
@@ -112,6 +121,8 @@ func (s *PushService) sendToSubscription(sub *domain.PushSubscription, data []by
 
 	if resp.StatusCode >= 400 {
 		log.Warn().Int("status", resp.StatusCode).Str("endpoint", sub.Endpoint).Msg("push: unexpected status")
+	} else {
+		log.Debug().Int("status", resp.StatusCode).Str("endpoint", sub.Endpoint).Msg("push: sent successfully")
 	}
 }
 

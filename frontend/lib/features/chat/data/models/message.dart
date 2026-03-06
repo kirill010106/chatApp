@@ -7,6 +7,7 @@ class Message {
   final DateTime createdAt;
   final String? clientMsgId;
   final bool isPending;
+  final bool isFailed;
 
   Message({
     required this.id,
@@ -17,6 +18,7 @@ class Message {
     required this.createdAt,
     this.clientMsgId,
     this.isPending = false,
+    this.isFailed = false,
   });
 
   factory Message.fromJson(Map<String, dynamic> json) {
@@ -34,18 +36,22 @@ class Message {
   /// Create a copy with updated fields (for optimistic updates).
   Message copyWith({
     String? id,
+    String? content,
+    String? contentType,
     bool? isPending,
+    bool? isFailed,
     DateTime? createdAt,
   }) {
     return Message(
       id: id ?? this.id,
       conversationId: conversationId,
       senderId: senderId,
-      content: content,
-      contentType: contentType,
+      content: content ?? this.content,
+      contentType: contentType ?? this.contentType,
       createdAt: createdAt ?? this.createdAt,
       clientMsgId: clientMsgId,
       isPending: isPending ?? this.isPending,
+      isFailed: isFailed ?? this.isFailed,
     );
   }
 }

@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -62,4 +63,8 @@ func (s *ChatService) GetParticipants(conversationID uuid.UUID) ([]uuid.UUID, er
 
 func (s *ChatService) MarkRead(conversationID, userID uuid.UUID) error {
 	return s.convRepo.MarkRead(conversationID, userID)
+}
+
+func (s *ChatService) GetLastReadAt(conversationID, userID uuid.UUID) (time.Time, error) {
+	return s.convRepo.GetLastReadAt(conversationID, userID)
 }

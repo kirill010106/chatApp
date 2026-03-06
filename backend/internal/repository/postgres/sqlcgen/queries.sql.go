@@ -603,3 +603,34 @@ func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]Sea
 	}
 	return items, nil
 }
+
+const updateUser = `-- name: UpdateUser :one
+UPDATE chatapp.users
+SET display_name = COALESCE(NULLIF($1::text, ''), display_name),
+    avatar_url   = COALESCE(NULLIF($2::text, ''), avatar_url),
+    updated_at   = now()
+WHERE id = $3
+RETURNING id, username, email, password_hash, display_name, avatar_url, created_at, updated_at
+`
+
+type UpdateUserParams struct {
+	DisplayName string      `json:"display_name"`
+	AvatarUrl   string      `json:"avatar_url"`
+	ID          pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (ChatappUser, error) {
+	row := q.db.QueryRow(ctx, updateUser, arg.DisplayName, arg.AvatarUrl, arg.ID)
+	var i ChatappUser
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.PasswordHash,
+		&i.DisplayName,
+		&i.AvatarUrl,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

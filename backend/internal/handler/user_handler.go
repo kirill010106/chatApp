@@ -42,3 +42,26 @@ func (h *UserHandler) Search(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, users)
 }
+
+type updateProfileRequest struct {
+	DisplayName string `json:"display_name"`
+	AvatarURL   string `json:"avatar_url"`
+}
+
+func (h *UserHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
+	var req updateProfileRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	user, err := h.userSvc.UpdateProfile(userID, req.DisplayName, req.AvatarURL)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update profile")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, user)
+}

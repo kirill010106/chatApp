@@ -78,6 +78,15 @@ class AuthNotifier extends AsyncNotifier<User?> {
     state = const AsyncData(null);
   }
 
+  Future<void> updateProfile({String? displayName, String? avatarUrl}) async {
+    final repo = ref.read(authRepositoryProvider);
+    final user = await repo.updateProfile(
+      displayName: displayName,
+      avatarUrl: avatarUrl,
+    );
+    state = AsyncData(user);
+  }
+
   Future<void> _saveTokens(AuthResponse response) async {
     final client = ref.read(dioClientProvider);
     client.setAccessToken(response.accessToken);

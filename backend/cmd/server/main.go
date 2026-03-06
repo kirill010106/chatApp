@@ -131,42 +131,31 @@ func main() {
 	if mediaSvc != nil {
 		mediaHandler := handler.NewMediaHandler(mediaSvc)
 		r.Get("/api/v1/media/*", mediaHandler.Proxy)
-
-		// Protected routes
-		r.Group(func(r chi.Router) {
-			r.Use(middleware.Auth(authSvc))
-
-			r.Get("/api/v1/users/me", userHandler.Me)
-			r.Get("/api/v1/users/search", userHandler.Search)
-
-			r.Post("/api/v1/conversations", chatHandler.Create)
-			r.Get("/api/v1/conversations", chatHandler.List)
-			r.Get("/api/v1/conversations/{id}/messages", chatHandler.Messages)
-			r.Post("/api/v1/conversations/{id}/read", chatHandler.MarkRead)
-
-			r.Post("/api/v1/push/subscribe", pushHandler.Subscribe)
-			r.Post("/api/v1/push/unsubscribe", pushHandler.Unsubscribe)
-
-			// Media upload
-			r.Post("/api/v1/media/upload", mediaHandler.Upload)
-		})
-	} else {
-		// Protected routes (no media)
-		r.Group(func(r chi.Router) {
-			r.Use(middleware.Auth(authSvc))
-
-			r.Get("/api/v1/users/me", userHandler.Me)
-			r.Get("/api/v1/users/search", userHandler.Search)
-
-			r.Post("/api/v1/conversations", chatHandler.Create)
-			r.Get("/api/v1/conversations", chatHandler.List)
-			r.Get("/api/v1/conversations/{id}/messages", chatHandler.Messages)
-			r.Post("/api/v1/conversations/{id}/read", chatHandler.MarkRead)
-
-			r.Post("/api/v1/push/subscribe", pushHandler.Subscribe)
-			r.Post("/api/v1/push/unsubscribe", pushHandler.Unsubscribe)
-		})
 	}
+
+	// Protected routes
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.Auth(authSvc))
+
+		r.Get("/api/v1/users/me", userHandler.Me)
+		r.Put("/api/v1/users/me", userHandler.UpdateProfile)
+		r.Get("/api/v1/users/search", userHandler.Search)
+
+		r.Post("/api/v1/conversations", chatHandler.Create)
+		r.Get("/api/v1/conversations", chatHandler.List)
+		r.Get("/api/v1/conversations/{id}/messages", chatHandler.Messages)
+		r.Post("/api/v1/conversations/{id}/read", chatHandler.MarkRead)
+		r.Get("/api/v1/conversations/{id}/read-status", chatHandler.ReadStatus)
+
+		r.Post("/api/v1/push/subscribe", pushHandler.Subscribe)
+		r.Post("/api/v1/push/unsubscribe", pushHandler.Unsubscribe)
+
+		// Media upload (only if S3 is configured)
+		if mediaSvc != nil {
+			mediaHandler := handler.NewMediaHandler(mediaSvc)
+			r.Post("/api/v1/media/upload", mediaHandler.Upload)
+		}
+	})
 
 	// Server
 	addr := fmt.Sprintf(":%d", cfg.Port)

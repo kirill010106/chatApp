@@ -2,6 +2,7 @@ package ws
 
 import (
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -71,9 +72,8 @@ func (h *Hub) SendToUser(userID uuid.UUID, data []byte) {
 	if ok {
 		select {
 		case client.send <- data:
-		default:
-			// Buffer full, skip
-			log.Warn().Str("user_id", userID.String()).Msg("ws: send buffer full, dropping message")
+		case <-time.After(2 * time.Second):
+			log.Warn().Str("user_id", userID.String()).Msg("ws: send buffer full after 2s, dropping message")
 		}
 	}
 }

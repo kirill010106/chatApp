@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import '../constants/api_constants.dart';
 import '../storage/secure_storage.dart';
@@ -7,6 +9,9 @@ class DioClient {
 
   // In-memory access token for fast access
   String? _accessToken;
+
+  /// Guards concurrent token refreshes.
+  Completer<bool>? _refreshCompleter;
 
   DioClient() {
     _dio = Dio(
@@ -70,9 +75,17 @@ class DioClient {
   String? get accessToken => _accessToken;
 
   Future<bool> _tryRefresh() async {
+    // If a refresh is already in-flight, wait for it instead of firing another.
+    if (_refreshCompleter != null) {
+      return _refreshCompleter!.future;
+    }
+    _refreshCompleter = Completer<bool>();
     try {
       final refreshToken = await SecureStorage.getRefreshToken();
-      if (refreshToken == null) return false;
+      if (refreshToken == null) {
+        _refreshCompleter!.complete(false);
+        return false;
+      }
 
       // Use a separate Dio instance to avoid interceptor loops
       final refreshDio = Dio(BaseOptions(baseUrl: ApiConstants.baseUrl));
@@ -87,10 +100,15 @@ class DioClient {
         _accessToken = newAccess;
         await SecureStorage.setAccessToken(newAccess);
         await SecureStorage.setRefreshToken(newRefresh);
+        _refreshCompleter!.complete(true);
         return true;
       }
+      _refreshCompleter!.complete(false);
     } catch (_) {
       // Refresh failed, user needs to re-login
+      _refreshCompleter!.complete(false);
+    } finally {
+      _refreshCompleter = null;
     }
     return false;
   }

@@ -23,4 +23,5 @@ type UserRepository interface {
 	GetByEmail(email string) (*User, error)
 	GetByUsername(username string) (*User, error)
 	Search(query string, limit int) ([]*User, error)
+	Update(user *User) error
 }

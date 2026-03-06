@@ -85,6 +85,48 @@ func (h *ChatHandler) MarkRead(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *ChatHandler) ReadStatus(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+
+	convIDStr := chi.URLParam(r, "id")
+	convID, err := uuid.Parse(convIDStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid conversation id")
+		return
+	}
+
+	// Get the other participant's last_read_at
+	participants, err := h.chatSvc.GetParticipants(convID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get participants")
+		return
+	}
+
+	var otherUserID uuid.UUID
+	for _, p := range participants {
+		if p != userID {
+			otherUserID = p
+			break
+		}
+	}
+	if otherUserID == uuid.Nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"other_last_read_at": nil})
+		return
+	}
+
+	lastReadAt, err := h.chatSvc.GetLastReadAt(convID, otherUserID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get read status")
+		return
+	}
+
+	if lastReadAt.IsZero() {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"other_last_read_at": nil})
+	} else {
+		writeJSON(w, http.StatusOK, map[string]string{"other_last_read_at": lastReadAt.Format(time.RFC3339Nano)})
+	}
+}
+
 func (h *ChatHandler) Messages(w http.ResponseWriter, r *http.Request) {
 	convIDStr := chi.URLParam(r, "id")
 	convID, err := uuid.Parse(convIDStr)

@@ -37,4 +37,5 @@ type ConversationRepository interface {
 	ListByUser(userID uuid.UUID) ([]*ConversationWithDetails, error)
 	MarkRead(conversationID, userID uuid.UUID) error
 	IsParticipant(conversationID, userID uuid.UUID) (bool, error)
+	GetLastReadAt(conversationID, userID uuid.UUID) (time.Time, error)
 }

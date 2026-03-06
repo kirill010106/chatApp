@@ -81,11 +81,48 @@ class MessagesNotifier extends FamilyAsyncNotifier<List<Message>, String> {
 
     // Send via WebSocket
     final wsService = ref.read(wsServiceProvider);
-    wsService.sendMessage(
+    final sent = wsService.sendMessage(
       conversationId: _conversationId,
       content: content,
       clientMsgId: clientMsgId,
     );
+    if (!sent) {
+      _markFailed(clientMsgId);
+    }
+  }
+
+  /// Retry a failed message.
+  void retryMessage(String clientMsgId) {
+    final current = state.value ?? [];
+    final idx = current.indexWhere((m) => m.clientMsgId == clientMsgId);
+    if (idx < 0) return;
+    final msg = current[idx];
+
+    // Reset to pending
+    final newList = [...current];
+    newList[idx] = msg.copyWith(isPending: true, isFailed: false);
+    state = AsyncData(newList);
+
+    final wsService = ref.read(wsServiceProvider);
+    final sent = wsService.sendMessage(
+      conversationId: _conversationId,
+      content: msg.content,
+      clientMsgId: clientMsgId,
+      contentType: msg.contentType,
+    );
+    if (!sent) {
+      _markFailed(clientMsgId);
+    }
+  }
+
+  void _markFailed(String clientMsgId) {
+    final current = state.value ?? [];
+    final idx = current.indexWhere((m) => m.clientMsgId == clientMsgId);
+    if (idx >= 0) {
+      final newList = [...current];
+      newList[idx] = current[idx].copyWith(isPending: false, isFailed: true);
+      state = AsyncData(newList);
+    }
   }
 
   /// Upload file to S3 then send the URL as a message via WS.
@@ -136,16 +173,18 @@ class MessagesNotifier extends FamilyAsyncNotifier<List<Message>, String> {
 
       // Send the URL via WebSocket
       final wsService = ref.read(wsServiceProvider);
-      wsService.sendMessage(
+      final sent = wsService.sendMessage(
         conversationId: _conversationId,
         content: result.url,
         clientMsgId: clientMsgId,
         contentType: result.contentType,
       );
+      if (!sent) {
+        _markFailed(clientMsgId);
+      }
     } catch (e) {
-      // Remove pending message on failure
-      final updated = state.value ?? [];
-      state = AsyncData(updated.where((m) => m.clientMsgId != clientMsgId).toList());
+      // Mark as failed on upload error
+      _markFailed(clientMsgId);
       rethrow;
     }
   }

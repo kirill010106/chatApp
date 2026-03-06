@@ -95,6 +95,24 @@ func (r *UserRepo) Search(query string, limit int) ([]*domain.User, error) {
 	return users, nil
 }
 
+func (r *UserRepo) Update(user *domain.User) error {
+	row, err := r.queries.UpdateUser(context.Background(), sqlcgen.UpdateUserParams{
+		ID:          uuidToPgUUID(user.ID),
+		DisplayName: user.DisplayName,
+		AvatarUrl:   user.AvatarURL,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrNotFound
+		}
+		return fmt.Errorf("user repo update: %w", err)
+	}
+	user.DisplayName = row.DisplayName
+	user.AvatarURL = row.AvatarUrl
+	user.UpdatedAt = row.UpdatedAt.Time
+	return nil
+}
+
 func sqlcUserToDomain(row sqlcgen.ChatappUser) *domain.User {
 	return &domain.User{
 		ID:           pgUUIDToUUID(row.ID),

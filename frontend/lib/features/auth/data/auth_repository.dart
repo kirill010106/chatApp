@@ -43,4 +43,18 @@ class AuthRepository {
     final response = await _client.get(ApiConstants.me);
     return User.fromJson(response.data);
   }
+
+  Future<User> updateProfile({
+    String? displayName,
+    String? avatarUrl,
+  }) async {
+    final response = await _client.put(
+      ApiConstants.me,
+      data: {
+        if (displayName != null) 'display_name': displayName,
+        if (avatarUrl != null) 'avatar_url': avatarUrl,
+      },
+    );
+    return User.fromJson(response.data);
+  }
 }
